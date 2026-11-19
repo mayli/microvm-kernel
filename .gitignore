@@ -12,3 +12,6 @@
 *.tar.xz
 *.diff.gz
 *.debian.tar.*
+
+__pycache__/
+*.pyc
