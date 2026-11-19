@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Decide whether the microvm PPA needs a new source upload.
+"""Decide whether to build and publish a new microvm kernel release.
 
-The workflow runs this on a schedule.  It compares the newest stable Ubuntu
-`linux` source in the resolute archive with the source versions already
-published in the PPA.  The kernel package itself is always built by
-Launchpad; this script only gates the source upload.
+The scheduled workflow compares the newest stable Ubuntu `linux` source for
+resolute with existing GitHub Releases.  It does not run for a pull request.
 """
 
 import json
@@ -16,7 +14,8 @@ import urllib.parse
 import urllib.request
 
 SERIES = os.environ.get("UBUNTU_SERIES", "resolute")
-PPA = os.environ.get("PPA", "")
+REPO = os.environ.get("GITHUB_REPOSITORY", "")
+TOKEN = os.environ.get("GITHUB_TOKEN", "")
 FORCE = os.environ.get("FORCE", "").lower() == "true"
 RUN = os.environ.get("GITHUB_RUN_NUMBER", "1")
 ATTEMPT = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
@@ -24,10 +23,13 @@ STABLE_POCKETS = {"Release", "Updates", "Security"}
 
 
 def api(url):
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "ubuntu-mini-microvm-kernel-ci"},
-    )
+    headers = {
+        "User-Agent": "ubuntu-mini-microvm-kernel-ci",
+        "Accept": "application/vnd.github+json",
+    }
+    if TOKEN:
+        headers["Authorization"] = f"Bearer {TOKEN}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.load(response)
 
@@ -76,38 +78,17 @@ def latest_upstream():
     return best
 
 
-def ppa_versions():
-    if not PPA.startswith("ppa:") or "/" not in PPA[4:]:
-        raise SystemExit("PPA must be set to ppa:OWNER/ARCHIVE")
-
-    owner, archive = PPA[4:].split("/", 1)
-    url = (
-        "https://api.launchpad.net/1.0/"
-        f"~{urllib.parse.quote(owner, safe='')}/+archive/ubuntu/"
-        f"{urllib.parse.quote(archive, safe='')}"
-    )
-    query = urllib.parse.urlencode(
-        {
-            "ws.op": "getPublishedSources",
-            "ws.size": "300",
-            "source_name": "linux",
-            "exact_match": "true",
-        }
-    )
-
-    try:
-        data = api(url + "?" + query)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            print(f"PPA {PPA} does not exist yet; treating as empty", file=sys.stderr)
-            return []
-        raise
-
-    return [
-        entry.get("source_package_version", "")
-        for entry in data.get("entries", [])
-        if entry.get("source_package_version")
-    ]
+def existing_release(prefix):
+    if not REPO:
+        raise SystemExit("GITHUB_REPOSITORY is not set")
+    query = urllib.parse.urlencode({"per_page": "100"})
+    url = f"https://api.github.com/repos/{REPO}/releases?{query}"
+    for release in api(url):
+        if release.get("draft"):
+            continue
+        if release.get("tag_name", "").startswith(prefix):
+            return release.get("tag_name")
+    return None
 
 
 def output(key, value):
@@ -119,29 +100,24 @@ def output(key, value):
 
 
 def main():
-    if not PPA:
-        raise SystemExit("PPA is not set; configure a repository variable")
-
     upstream = latest_upstream()
-    versions = ppa_versions()
-    prefix = f"{upstream}microvm"
-    already_published = any(version.startswith(prefix) for version in versions)
-    changed = FORCE or not already_published
+    tag_prefix = f"kernel-{upstream}-"
+    existing = existing_release(tag_prefix)
+    changed = FORCE or existing is None
+    tag = f"{tag_prefix}{RUN}.{ATTEMPT}"
     version = f"{upstream}microvm{RUN}.{ATTEMPT}"
-    source_upload = "sd" if versions else "sa"
 
     output("upstream", upstream)
     output("version", version)
+    output("tag", tag)
     output("changed", str(changed).lower())
-    output("source_upload", source_upload)
 
     summary = (
         f"Upstream linux: `{upstream}`\n\n"
-        f"PPA: `{PPA}`\n\n"
-        f"Already published: `{already_published}`\n\n"
+        f"Existing release: `{existing or 'none'}`\n\n"
         f"Force: `{FORCE}`\n\n"
-        f"Next source version: `{version}`\n\n"
-        f"Source upload mode: `{source_upload}`\n"
+        f"Next release tag: `{tag}`\n\n"
+        f"Source version: `{version}`\n"
     )
     print(summary)
     path = os.environ.get("GITHUB_STEP_SUMMARY")

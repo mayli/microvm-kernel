@@ -1,121 +1,166 @@
-# GitHub Actions → Launchpad PPA
+# GitHub Actions → Release + Pages
 
-The kernel binary is **built and hosted by Launchpad**. GitHub Actions only
-prepares and uploads the source package.
+One GitHub Actions run builds the kernel, boot-tests it, and publishes it to:
+
+- a **GitHub Release** containing the `.deb` files, `vmlinuz`, config,
+  `System.map` and checksums;
+- a **GitHub Pages apt repository** for `apt install` / `apt upgrade`.
 
 ```text
-schedule / tag / manual
-          │
-          ▼
-GitHub Actions: make source
-  - apt-get source linux=<latest stable resolute>
-  - apply microvm config, annotations and packaging
-  - dpkg-buildpackage -S
-  - sign .changes with the Launchpad GPG key
-          │
-          ▼
-dput ppa:OWNER/ARCHIVE
-          │
-          ▼
-Launchpad: builds linux-image-*-microvm and publishes it in the PPA
+daily schedule / manual
+        │
+        ▼
+detect upstream stable linux in resolute
+  - ignore Proposed/Backports
+  - stop if a GitHub Release for this upstream already exists
+        │
+        ▼
+build (Docker resolute builder)
+  - make build
+  - make boot-test (QEMU TCG)
+        │
+        ├── GitHub Release
+        │     .deb + vmlinuz + config + System.map + SHA256SUMS
+        │
+        └── GitHub Pages
+              signed apt repository (latest package set)
 ```
+
+No Launchpad source upload or binary build is involved in the default
+workflow.
 
 ## One-time setup
 
-1. Create a PPA on Launchpad and enable **amd64 only**.
-2. Import the GPG key you will use for uploads into Launchpad.
-3. Create a dedicated signing key (preferably a signing-only subkey with no
-   interactive passphrase in CI) and export it:
-
-   ```sh
-   gpg --armor --export-secret-keys YOUR_KEY_ID | base64 -w0
-   ```
-
-4. In the GitHub repository, set these **variables**:
-
-   | Variable | Example |
-   |---|---|
-   | `PPA` | `ppa:YOUR_USER/microvm` |
-   | `DEBFULLNAME` | `ubuntu-mini` |
-   | `DEBEMAIL` | the email on the Launchpad signing key |
-
-5. Set these **secrets**:
+1. In the repository: **Settings → Pages → Build and deployment → Source:
+   GitHub Actions**.
+2. Add the apt-repository signing key as secrets:
 
    | Secret | Value |
    |---|---|
-   | `GPG_PRIVATE_KEY` | base64-encoded exported private key |
-   | `GPG_KEY_ID` | the signing key ID/fingerprint |
+   | `GPG_PRIVATE_KEY` | base64 of the exported private key |
+   | `GPG_KEY_ID` | key ID or full fingerprint |
 
-6. Make sure the PPA exists before the first run. The workflow detects a
-   missing PPA as “no previous source”, but `dput` still needs it.
+   Use a dedicated signing key without an interactive passphrase in CI. The
+   public key is published as `microvm-archive-keyring.asc` on Pages.
+
+3. Ensure Actions are enabled and the repository has a `main` branch.
+
+No PPA variables are needed unless you also use the manual Launchpad path.
 
 ## Schedule and triggers
 
-`.github/workflows/ppa.yml` runs:
+`.github/workflows/release.yml`:
 
-- **Daily at 04:17 UTC** — checks the newest stable `linux` source in
-  `resolute` (Release, Updates and Security pockets; Proposed and Backports
-  are ignored).
-- **On a `kernel-*` tag** — forces a source build/upload with a unique version.
-- **Manual `workflow_dispatch`** — optional `force` input.
+- **Daily at 04:17 UTC**: checks the newest stable `linux` source for
+  `resolute` in Launchpad's Release, Updates and Security pockets.
+- **Manual `workflow_dispatch`**: optional `force` input.
 
-The workflow uses the Launchpad API to compare the newest stable source
-version with the source versions already published in the PPA. If the PPA
-already has a source for that upstream version, the job stops before doing
-any expensive work.
-
-## Versions
-
-The source version is:
+The detection script compares the upstream version with GitHub Releases whose
+tags start with:
 
 ```text
-<upstream>microvm<run-number>.<run-attempt>
+kernel-<upstream>-
 ```
 
-For example:
+If a release exists, the workflow stops. `force` creates a new release with a
+new run-based tag.
+
+## Versions and assets
+
+Example source/kernel version:
 
 ```text
 7.0.0-43.43microvm42.1
 ```
 
-The derived kernel packages are still:
+Release tag:
 
 ```text
-linux-image-7.0.0-43-microvm
-linux-modules-7.0.0-43-microvm
+kernel-7.0.0-43.43-42.1
 ```
 
-The first upload uses `SOURCE_UPLOAD=sa` and includes the 244 MiB
-`linux_7.0.0.orig.tar.gz`. Later uploads use `SOURCE_UPLOAD=sd` and omit the
-orig tarball because the PPA already has it.
+Release assets:
 
-## Manual run
-
-```sh
-PPA=ppa:YOUR_USER/microvm \
-GITHUB_RUN_NUMBER=1 \
-GITHUB_RUN_ATTEMPT=1 \
-python3 .github/scripts/check-upstream.py
+```text
+linux-image-7.0.0-43-microvm_*.deb
+linux-modules-7.0.0-43-microvm_*.deb
+linux-headers-7.0.0-43-microvm_*.deb
+linux-buildinfo-7.0.0-43-microvm_*.deb
+vmlinuz-7.0.0-43-microvm
+config-7.0.0-43-microvm
+System.map-7.0.0-43-microvm
+microvm.config
+SHA256SUMS
 ```
 
-To force a build locally:
+## Pages apt repository
+
+The Pages job creates:
+
+```text
+public/
+├── dists/stable/InRelease
+├── dists/stable/Release
+├── dists/stable/Release.gpg
+├── dists/stable/main/binary-amd64/Packages
+├── dists/stable/main/binary-amd64/Packages.gz
+├── pool/main/l/linux/*.deb
+├── microvm-archive-keyring.asc
+└── index.html
+```
+
+Users install with:
 
 ```sh
-SOURCE_UPLOAD=sa \
-KERNEL_VERSION=7.0.0-43.43microvm1.1 \
-UBUNTU_SOURCE_VERSION=7.0.0-43.43 \
+sudo install -m 0644 microvm-archive-keyring.asc \
+  /usr/share/keyrings/microvm-archive-keyring.asc
+
+echo "deb [signed-by=/usr/share/keyrings/microvm-archive-keyring.asc] \
+https://OWNER.github.io/REPO stable main" \
+  | sudo tee /etc/apt/sources.list.d/microvm.list
+
+sudo apt update
+sudo apt install linux-image-7.0.0-43-microvm
+```
+
+The apt metadata is generated with `apt-ftparchive` and signed with
+`GPG_KEY_ID`; the kernel itself remains unsigned.
+
+## Limits
+
+- GitHub Pages published sites have a **1 GB** limit. The workflow publishes
+  only the current build. Older versions stay in GitHub Releases for
+  download/rollback.
+- Release assets must be under **2 GiB** each; the kernel artifacts are tiny.
+- Pages apt repository has no server-side redirects or dynamic metadata; all
+  metadata is regenerated in CI.
+- Upgrades across an ABI change (`7.0.0-43` → `7.0.0-44`) require installing
+  the new package name, or adding a `linux-image-microvm` meta package.
+- Kernel updates are not `apt`-installed if you use the base-swap/ubuntu-mini
+  flow; the Release assets are the intended input.
+
+## Manual local test
+
+```sh
+./scripts/in-container.sh make build
+./scripts/boot-test.sh
+
+# Inspect the Pages repository layout without signing:
+ls out/debs
+```
+
+The manual Launchpad path remains available:
+
+```sh
 make source
+debsign -kYOUR_GPG_KEY_ID work/linux_7.0.0-999.1_source.changes
+make upload PPA=ppa:YOUR_USER/microvm
 ```
 
-## Limitations
+## Failure behavior
 
-- If a source publication exists but the Launchpad binary build failed, the
-  cron job treats that upstream version as already handled. Use a manual
-  `force` run (new version) or delete the source publication in the PPA.
-- The schedule follows Ubuntu's **stable** pockets. A version that is only in
-  `-proposed` is intentionally ignored until it reaches updates/security.
-- The signing key must be available to Launchpad and the same identity should
-  be used for `DEBEMAIL`/`Changed-By`.
-- The PPA build is unsigned for Secure Boot. This project does not use
-  `linux-signed`.
-- Public PPA means public source, config and build logs.
+- If the scheduled detection says no new upstream release, no build runs.
+- If the build or boot test fails, neither the Release nor the Pages deploy
+  runs.
+- If a Release was published but the Pages deploy failed, rerun the workflow
+  with `force`; a new version/tag is created.

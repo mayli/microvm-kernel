@@ -111,7 +111,9 @@ EOF
 chmod +x "$TEST/init"
 
 mkdir -p "$TEST/rootfs"/{bin,sbin,proc,sys,dev,mnt,run,tmp}
-cp /usr/bin/busybox "$TEST/rootfs/bin/busybox"
+BUSYBOX="$(command -v busybox)"
+require_file "$BUSYBOX"
+cp "$BUSYBOX" "$TEST/rootfs/bin/busybox"
 for app in sh mount umount mkdir cat echo sleep poweroff zcat grep wc ls ln sync dmesg cut awk find test printf mknod losetup; do
     ln -sf /bin/busybox "$TEST/rootfs/bin/$app"
 done

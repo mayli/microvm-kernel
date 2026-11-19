@@ -1,0 +1,221 @@
+name: microvm-kernel-release
+
+on:
+  schedule:
+    # Daily check for a new stable Ubuntu linux source in resolute.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and publish even if this upstream already has a release
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: microvm-kernel-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      upstream: ${{ steps.check.outputs.upstream }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check upstream linux and existing releases
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force || false }}
+        run: python3 .github/scripts/check-release.py
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install boot-test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates qemu-system-x86 busybox-static \
+            squashfs-tools parted e2fsprogs cpio gzip nftables
+
+      - name: Build microvm kernel
+        env:
+          KERNEL_VERSION: ${{ needs.detect.outputs.version }}
+          UBUNTU_SOURCE_VERSION: ${{ needs.detect.outputs.upstream }}
+        run: ./scripts/in-container.sh make build
+
+      - name: Boot-test the built kernel
+        run: ./scripts/boot-test.sh
+
+      - name: Extract config and System.map
+        run: |
+          set -euo pipefail
+          modules_deb="$(ls out/debs/linux-modules-*microvm*.deb | head -n 1)"
+          rm -rf out/modules-root
+          dpkg-deb -x "$modules_deb" out/modules-root
+          cp out/modules-root/boot/config-* out/
+          cp out/modules-root/boot/System.map-* out/
+          rm -rf out/modules-root
+
+      - name: Create checksums
+        run: |
+          set -euo pipefail
+          cd out
+          sha256sum vmlinuz-* config-* System.map-* debs/*.deb microvm.config \
+            > SHA256SUMS
+
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          if-no-files-found: error
+          path: |
+            out/debs/*.deb
+            out/vmlinuz-*
+            out/config-*
+            out/System.map-*
+            out/microvm.config
+            out/SHA256SUMS
+
+  release:
+    needs: [detect, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kernel
+          path: out
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          UPSTREAM: ${{ needs.detect.outputs.upstream }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            out/debs/*.deb \
+            out/vmlinuz-* \
+            out/config-* \
+            out/System.map-* \
+            out/microvm.config \
+            out/SHA256SUMS \
+            --target "$GITHUB_SHA" \
+            --title "microvm kernel $VERSION" \
+            --notes "Ubuntu microvm kernel based on $UPSTREAM. Built and boot-tested by GitHub Actions; unsigned; no loadable modules."
+
+  pages:
+    needs: [detect, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kernel
+          path: out
+
+      - name: Install apt repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg
+
+      - name: Import archive signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d "$HOME/.gnupg"
+          printf '%s' "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
+
+      - name: Build apt repository
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          set -euo pipefail
+          : "${GPG_KEY_ID:?set the GPG_KEY_ID secret}"
+
+          rm -rf public
+          mkdir -p public/dists/stable/main/binary-amd64 \
+                   public/pool/main/l/linux
+          cp out/debs/*.deb public/pool/main/l/linux/
+
+          cd public
+          apt-ftparchive packages pool \
+            > dists/stable/main/binary-amd64/Packages
+          gzip -kf dists/stable/main/binary-amd64/Packages
+
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=ubuntu-mini \
+            -o APT::FTPArchive::Release::Label=ubuntu-mini \
+            -o APT::FTPArchive::Release::Suite=stable \
+            -o APT::FTPArchive::Release::Codename=stable \
+            -o APT::FTPArchive::Release::Architectures=amd64 \
+            -o APT::FTPArchive::Release::Components=main \
+            release dists/stable > dists/stable/Release
+
+          gpg --batch --yes --default-key "$GPG_KEY_ID" \
+            --clearsign -o dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes --default-key "$GPG_KEY_ID" \
+            -abs -o dists/stable/Release.gpg dists/stable/Release
+          gpg --armor --export "$GPG_KEY_ID" \
+            > microvm-archive-keyring.asc
+
+          image_deb="$(ls ../out/debs/linux-image-*microvm*.deb | head -n 1)"
+          image_pkg="$(dpkg-deb -f "$image_deb" Package)"
+
+          owner="${GITHUB_REPOSITORY%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          if [[ "$repo" == *.github.io ]]; then
+              pages_url="https://${repo}"
+          else
+              pages_url="https://${owner}.github.io/${repo}"
+          fi
+
+          cat > index.html <<EOF
+          <!doctype html>
+          <title>ubuntu-mini microvm kernel</title>
+          <h1>ubuntu-mini microvm kernel</h1>
+          <p>APT source:</p>
+          <pre>deb [signed-by=/usr/share/keyrings/microvm-archive-keyring.asc] ${pages_url} stable main</pre>
+          <p>Key: <a href="microvm-archive-keyring.asc">microvm-archive-keyring.asc</a></p>
+          <p>Install:</p>
+          <pre>sudo install -m 0644 microvm-archive-keyring.asc /usr/share/keyrings/microvm-archive-keyring.asc
+          echo "deb [signed-by=/usr/share/keyrings/microvm-archive-keyring.asc] ${pages_url} stable main" | sudo tee /etc/apt/sources.list.d/microvm.list
+          sudo apt update
+          sudo apt install ${image_pkg}</pre>
+          EOF
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

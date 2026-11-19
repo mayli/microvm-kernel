@@ -131,28 +131,36 @@ needed to generate `linux-image-7.0.0-999-microvm` in `debian/control`.
 
 ## CI/CD boundary
 
-GitHub Actions prepares and uploads the source package. It never builds or
-uploads kernel binaries. Launchpad remains the only binary builder and the
-PPA remains the distribution point.
+GitHub Actions builds the kernel, boot-tests it under QEMU and publishes the
+result to:
+
+- a GitHub Release (permanent archive of `.deb`, `vmlinuz`, config,
+  `System.map` and checksums);
+- a GitHub Pages apt repository (current package set, signed metadata).
 
 A daily workflow checks the stable `linux` source version in the `resolute`
-archive and compares it with published sources in the PPA. If upstream
-changed, CI builds a source package and `dput`s it; Launchpad builds the
-kernel. See `docs/ci-cd.md`.
+archive and compares it with existing `kernel-<upstream>-*` GitHub Releases.
+If upstream changed, CI builds once and publishes both targets. See
+`docs/ci-cd.md`.
 
-A Launchpad-native recipe was considered but rejected for this tree: the
-Ubuntu source is Debian format `1.0` and needs the 244 MiB orig tarball,
-which a recipe cannot obtain with `apt-get source`, and maintaining a 1.8 GiB
-source branch on Launchpad is unnecessary.
+The Launchpad PPA path still exists as a manual fallback (`make source`,
+`debsign`, `make upload`). It is no longer part of the scheduled workflow, so
+there is no duplicate kernel build.
 
-## Signing, PPA and distribution
+A fully Launchpad-native recipe was rejected for this tree: the Ubuntu source
+is Debian format `1.0` and needs the 244 MiB orig tarball, which a recipe
+cannot obtain with `apt-get source`, and maintaining a 1.8 GiB source branch
+on Launchpad is unnecessary.
+
+## Signing and distribution
 
 - Kernel image signing: **not required**. Secure Boot is out of scope.
 - `linux-signed`, Canonical signing keys, and `sbsign` are not used.
-- PPA: **public**. Build logs, source and config are public.
-- Launchpad builds only `amd64`.
-- The source is Ubuntu's `linux` source with a custom changelog version; the
-  PPA is separate from the archive, so there is no package-name collision.
+- GitHub Pages apt repository metadata is signed with a dedicated GPG key;
+  the kernel `.deb` files themselves are unsigned.
+- GitHub Release assets are public; Pages is public.
+- Only `amd64` is built/published.
+- The source is Ubuntu's `linux` source with a custom changelog version.
 
 ## Non-goals
 

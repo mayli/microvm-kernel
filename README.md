@@ -1,4 +1,4 @@
-# Ubuntu microvm kernel PPA
+# Ubuntu microvm kernel builds
 
 Build and publish a minimal, monolithic Ubuntu kernel for the `ubuntu-mini`
 guest VMs.
@@ -9,11 +9,13 @@ guest VMs.
 - **Config seed:** Firecracker's
   `microvm-kernel-ci-x86_64-6.18.config`, plus its `ci.config` and
   `efi.config` fragments
-- **Output:** `linux-image-7.0.0-999-microvm` — unsigned, no loadable modules
+- **Output:** `linux-image-<upstream>-microvm` — unsigned, no loadable modules
 - **Target:** QEMU/KVM guest with virtio-blk/net/console, GPT + ext4,
   squashfs + overlayfs
-- **Signing:** none. Secure Boot is out of scope.
-- **PPA:** public Launchpad PPA
+- **Signing:** kernel unsigned; the GitHub Pages apt repo is signed.
+  Secure Boot is out of scope.
+- **Distribution:** GitHub Releases for archives plus a GitHub Pages apt
+  repository for `apt install` / `apt upgrade`
 
 The optional meta package `linux-image-microvm` is not required for
 ubuntu-mini's base-swap tooling. Use the versioned package or extract its
@@ -22,8 +24,8 @@ ubuntu-mini's base-swap tooling. Use the versioned package or extract its
 ## Quick start
 
 `make prepare` uses `apt-get source linux=7.0.0-43.43` by default. That gives
-the exact archive source tree plus the `linux_7.0.0.orig.tar.gz` needed for
-the PPA. Set `USE_APT_SOURCE=0` to clone the Launchpad git tag instead.
+the exact archive source tree. Set `USE_APT_SOURCE=0` to clone the Launchpad
+git tag instead.
 
 The build host needs a resolute/26.04 build environment. If the host is
 missing kernel build dependencies, build inside the provided container:
@@ -54,7 +56,11 @@ After a build, run the QEMU boot test:
 make boot-test
 ```
 
-To publish:
+The GitHub Actions workflow builds, boot-tests and publishes the kernel to a
+GitHub Release and a GitHub Pages apt repository. See
+[`docs/ci-cd.md`](docs/ci-cd.md).
+
+The older Launchpad source-upload path is still available manually:
 
 ```sh
 make source
@@ -63,15 +69,8 @@ make upload PPA=ppa:YOUR_USER/microvm
 ```
 
 The first source upload includes the ~255 MiB `linux_7.0.0.orig.tar.gz`.
-Later uploads can reuse it. `make source` deliberately builds an unsigned
-source package; Launchpad requires the `.changes` to be signed with the GPG
-key registered to your Launchpad account. Set `DEBFULLNAME`/`DEBEMAIL` (or
-edit the changelog) before the first source build so `Changed-By` is the
-identity associated with that key.
-
-For automated source uploads on a schedule, see
-[`docs/ci-cd.md`](docs/ci-cd.md). The GitHub Action only uploads the source
-package; Launchpad remains the kernel binary builder.
+Later uploads can reuse it with `SOURCE_UPLOAD=sd`. `make source`
+deliberately builds an unsigned source package.
 
 ## Why this exists
 
@@ -93,10 +92,10 @@ config/fragments/    Our overrides, applied after the upstream fragments
 patches/             Ubuntu packaging guards for a kernel with no modules
 packaging/           Extra control.d flavour metadata
 docker/              Reproducible resolute build container
-.github/             GitHub Actions source-upload workflow and upstream check
+.github/             GitHub Actions build/release workflow and upstream check
 scripts/             prepare, render, verify, build, boot test, source, upload
 docs/decisions.md    What we chose and why
-docs/ci-cd.md        GitHub Actions → Launchpad PPA setup and schedule
+docs/ci-cd.md        GitHub Actions → Release + Pages setup and schedule
 docs/plan.md         Phases, tests, acceptance criteria, risks
 work/                Ubuntu kernel source clone and build output (ignored)
 out/                 Collected .debs, vmlinuz, rendered config (ignored)
@@ -104,9 +103,9 @@ out/                 Collected .debs, vmlinuz, rendered config (ignored)
 
 ## Requirements and limitations
 
-- The local build needs a resolute build environment. Launchpad supplies its
-  own chroot for the PPA build.
-- Expect a kernel build of roughly 10–40 minutes locally depending on CPU,
+- The local build needs a resolute build environment; GitHub Actions uses the
+  provided container.
+- Expect a kernel build of roughly 10–20 minutes in CI on a 4-core runner,
   because debug info, modules, tools and DKMS are disabled.
 - The result is **unsigned**. Do not use it with Secure Boot unless you sign
   it yourself.

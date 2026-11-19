@@ -57,41 +57,38 @@ The minimal QEMU boot test is `scripts/boot-test.sh`; it covers the kernel
 features above. The full UFW and base-swap tests still need the real
 ubuntu-mini rootfs.
 
-## Phase 3 — public PPA
+## Phase 3 — GitHub Release + Pages apt repository
 
 Prerequisites:
 
-- Launchpad account and a PPA named `microvm` (or another name)
-- GPG key registered with Launchpad
-- `dput` configured
+- GitHub Pages source set to **GitHub Actions**
+- GPG signing key for the apt repository in repository secrets
+  (`GPG_PRIVATE_KEY`, `GPG_KEY_ID`)
 
 Commands:
 
 ```sh
-make source
-debsign -kYOUR_GPG_KEY_ID work/linux_7.0.0-999.1_source.changes
-make upload PPA=ppa:YOUR_USER/microvm
+# manually, after configuring Actions:
+#   Actions → microvm-kernel-release → Run workflow
+# or wait for the 04:17 UTC schedule
 ```
 
 Acceptance:
 
-- [x] `make source` produces `linux_7.0.0-999.1.dsc` and
-      `linux_7.0.0-999.1_source.changes`
-- [x] the source diff contains `vars.microvm`, `flavours = microvm`, the
-      no-modules packaging patch, and the `amd64-microvm` annotations
-- [x] GitHub Actions workflow and daily upstream check are in
-      `.github/workflows/ppa.yml` and `.github/scripts/check-upstream.py`
-- [x] the workflow uses `SOURCE_UPLOAD=sa` on the first upload and `sd`
-      afterwards
-- [ ] `.changes` is signed with the Launchpad GPG key in CI secrets
-- [ ] the first GitHub Actions run uploads to the PPA
-- [ ] Launchpad builds `amd64` successfully
-- [ ] `.changes` includes the orig tarball on the first upload
-- [ ] the PPA contains `linux-image-7.0.0-999-microvm`
-- [ ] the PPA contains `linux-modules-7.0.0-999-microvm` with config/System.map
-      but no `.ko` files
-- [ ] build log is public and has no signing step
-- [ ] the built package boots on the target
+- [x] workflow checks the stable `resolute` `linux` version and existing
+      `kernel-<upstream>-*` releases
+- [x] build job runs `make build` and `make boot-test`
+- [x] release job attaches `.deb`, `vmlinuz`, config, `System.map` and
+      `SHA256SUMS` to a GitHub Release
+- [x] pages job generates `dists/stable` (`Packages`, `Release`, `InRelease`)
+      and deploys it with `actions/deploy-pages`
+- [ ] repository secrets `GPG_PRIVATE_KEY`/`GPG_KEY_ID` configured
+- [ ] the first scheduled/manual run succeeds
+- [ ] the Release exists and contains the kernel artifacts
+- [ ] the Pages apt repo is signed and `apt update` accepts it
+- [ ] `apt install linux-image-<abi>-microvm` works on a test host
+- [ ] the Pages repository stays under the 1 GB site limit
+- [ ] old versions remain available in Releases for rollback
 
 ## Phase 4 — ubuntu-mini integration
 
@@ -106,8 +103,8 @@ Acceptance:
 ## Risks / open questions
 
 - **Annotations import size:** adding a full new flavour to
-  `debian.master/config/annotations` creates a large diff. Acceptable for a
-  custom PPA; inspect it before uploading.
+  `debian.master/config/annotations` creates a large diff. Inspect it before
+  publishing.
 - **UFW coverage:** the Firecracker config was not built for UFW. The fragment
   is a best-effort list; verify with the actual `ufw`/`nft` userspace. Add
   missing matches/targets if a rule fails.
@@ -119,8 +116,10 @@ Acceptance:
   virtio transport (PCI vs MMIO), disk type (blk vs scsi), and network setup
   before building.
 - **Source package format:** the Ubuntu kernel source is Debian format `1.0`
-  and needs `linux_7.0.0.orig.tar.gz`. The first PPA upload is large.
-- **Public PPA:** everything is public. Do not include secrets in configs,
-  changelog entries or scripts.
+  and needs `linux_7.0.0.orig.tar.gz` for the manual Launchpad fallback.
+- **Pages size:** GitHub Pages has a 1 GB published-site limit. Publish only
+  the current package set and keep history in Releases.
+- **Public artifacts:** everything is public. Do not include secrets in
+  configs, changelog entries or scripts.
 - **Unsigned kernel:** do not enable Secure Boot on the target; it will not
   boot this kernel.
