@@ -6,8 +6,8 @@ require_src
 require_cmd fakeroot
 require_cmd dpkg-buildpackage
 
-UPSTREAM="${UPSTREAM:-7.0.0}"
 UBUNTU_SOURCE_VERSION="${UBUNTU_SOURCE_VERSION:-7.0.0-43.43}"
+UPSTREAM="${UPSTREAM:-${UBUNTU_SOURCE_VERSION%%-*}}"
 ORIG="$WORK/linux_${UPSTREAM}.orig.tar.gz"
 
 if [[ ! -f "$ORIG" ]]; then
@@ -33,7 +33,9 @@ case "$source_upload" in
 esac
 
 log "building source package (format 1.0, source upload: $source_upload)"
-dpkg-buildpackage -S "-${source_upload}" -us -uc
+# -d: source-only builds do not compile anything here.  Launchpad installs the
+# declared Build-Depends when it builds the binary packages.
+dpkg-buildpackage -S "-${source_upload}" -d -us -uc
 
 changes="$(find "$WORK" -maxdepth 1 -type f -name 'linux_*_source.changes' \
     -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
