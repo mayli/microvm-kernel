@@ -26,8 +26,14 @@ cd "$SRC"
 log "regenerating debian/changelog"
 fakeroot debian/rules clean
 
-log "building source package (format 1.0, includes orig tarball)"
-dpkg-buildpackage -S -sa -us -uc
+source_upload="${SOURCE_UPLOAD:-sa}"
+case "$source_upload" in
+    sa|sd) ;;
+    *) die "SOURCE_UPLOAD must be 'sa' (include orig) or 'sd' (omit orig)" ;;
+esac
+
+log "building source package (format 1.0, source upload: $source_upload)"
+dpkg-buildpackage -S "-${source_upload}" -us -uc
 
 changes="$(find "$WORK" -maxdepth 1 -type f -name 'linux_*_source.changes' \
     -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"

@@ -129,6 +129,22 @@ for a monolithic kernel.
 `packaging/debian.master/control.d/vars.microvm` adds the flavour metadata
 needed to generate `linux-image-7.0.0-999-microvm` in `debian/control`.
 
+## CI/CD boundary
+
+GitHub Actions prepares and uploads the source package. It never builds or
+uploads kernel binaries. Launchpad remains the only binary builder and the
+PPA remains the distribution point.
+
+A daily workflow checks the stable `linux` source version in the `resolute`
+archive and compares it with published sources in the PPA. If upstream
+changed, CI builds a source package and `dput`s it; Launchpad builds the
+kernel. See `docs/ci-cd.md`.
+
+A Launchpad-native recipe was considered but rejected for this tree: the
+Ubuntu source is Debian format `1.0` and needs the 244 MiB orig tarball,
+which a recipe cannot obtain with `apt-get source`, and maintaining a 1.8 GiB
+source branch on Launchpad is unnecessary.
+
 ## Signing, PPA and distribution
 
 - Kernel image signing: **not required**. Secure Boot is out of scope.

@@ -79,7 +79,12 @@ Acceptance:
       `linux_7.0.0-999.1_source.changes`
 - [x] the source diff contains `vars.microvm`, `flavours = microvm`, the
       no-modules packaging patch, and the `amd64-microvm` annotations
-- [ ] `.changes` is signed with the Launchpad GPG key
+- [x] GitHub Actions workflow and daily upstream check are in
+      `.github/workflows/ppa.yml` and `.github/scripts/check-upstream.py`
+- [x] the workflow uses `SOURCE_UPLOAD=sa` on the first upload and `sd`
+      afterwards
+- [ ] `.changes` is signed with the Launchpad GPG key in CI secrets
+- [ ] the first GitHub Actions run uploads to the PPA
 - [ ] Launchpad builds `amd64` successfully
 - [ ] `.changes` includes the orig tarball on the first upload
 - [ ] the PPA contains `linux-image-7.0.0-999-microvm`

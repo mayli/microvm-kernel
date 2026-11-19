@@ -1,0 +1,92 @@
+name: microvm-kernel-ppa
+
+on:
+  schedule:
+    # Daily check for a new stable Ubuntu linux source in resolute.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Upload even if the PPA already has this upstream version
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "kernel-*"
+
+concurrency:
+  group: microvm-kernel-ppa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      upstream: ${{ steps.check.outputs.upstream }}
+      version: ${{ steps.check.outputs.version }}
+      source_upload: ${{ steps.check.outputs.source_upload }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check upstream linux and PPA state
+        id: check
+        env:
+          PPA: ${{ vars.PPA }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force || github.event_name == 'push' }}
+        run: python3 .github/scripts/check-upstream.py
+
+  source:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Show decision
+        run: |
+          echo "upstream=${{ needs.detect.outputs.upstream }}"
+          echo "version=${{ needs.detect.outputs.version }}"
+          echo "source_upload=${{ needs.detect.outputs.source_upload }}"
+      - uses: actions/checkout@v4
+
+      - name: Install source-package tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates git make gcc libc6-dev \
+            python3 python3-dev dpkg-dev debhelper fakeroot \
+            bison flex libssl-dev bc gawk \
+            dput devscripts gnupg curl
+
+      - name: Build source package
+        env:
+          KERNEL_VERSION: ${{ needs.detect.outputs.version }}
+          UBUNTU_SOURCE_VERSION: ${{ needs.detect.outputs.upstream }}
+          SOURCE_UPLOAD: ${{ needs.detect.outputs.source_upload }}
+          DEBFULLNAME: ${{ vars.DEBFULLNAME }}
+          DEBEMAIL: ${{ vars.DEBEMAIL }}
+        run: |
+          : "${DEBFULLNAME:?set repository variable DEBFULLNAME}"
+          : "${DEBEMAIL:?set repository variable DEBEMAIL}"
+          make source
+
+      - name: Import Launchpad signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d "$HOME/.gnupg"
+          printf '%s' "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
+
+      - name: Sign and upload source package
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          PPA: ${{ vars.PPA }}
+        run: |
+          : "${PPA:?set repository variable PPA}"
+          changes="$(ls work/linux_*_source.changes | head -n 1)"
+          debsign -k"$GPG_KEY_ID" "$changes"
+          dput "$PPA" "$changes"

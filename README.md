@@ -69,6 +69,10 @@ key registered to your Launchpad account. Set `DEBFULLNAME`/`DEBEMAIL` (or
 edit the changelog) before the first source build so `Changed-By` is the
 identity associated with that key.
 
+For automated source uploads on a schedule, see
+[`docs/ci-cd.md`](docs/ci-cd.md). The GitHub Action only uploads the source
+package; Launchpad remains the kernel binary builder.
+
 ## Why this exists
 
 The stock Ubuntu generic kernel has `overlayfs`, many netfilter pieces, and
@@ -89,8 +93,10 @@ config/fragments/    Our overrides, applied after the upstream fragments
 patches/             Ubuntu packaging guards for a kernel with no modules
 packaging/           Extra control.d flavour metadata
 docker/              Reproducible resolute build container
+.github/             GitHub Actions source-upload workflow and upstream check
 scripts/             prepare, render, verify, build, boot test, source, upload
 docs/decisions.md    What we chose and why
+docs/ci-cd.md        GitHub Actions → Launchpad PPA setup and schedule
 docs/plan.md         Phases, tests, acceptance criteria, risks
 work/                Ubuntu kernel source clone and build output (ignored)
 out/                 Collected .debs, vmlinuz, rendered config (ignored)
