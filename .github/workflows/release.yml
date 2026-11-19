@@ -83,8 +83,10 @@ jobs:
         run: |
           set -euo pipefail
           cd out
-          sha256sum vmlinuz-* config-* System.map-* debs/*.deb microvm.config \
-            > SHA256SUMS
+          {
+            sha256sum vmlinuz-* config-* System.map-* microvm.config
+            (cd debs && sha256sum *.deb)
+          } > SHA256SUMS
 
       - name: Upload kernel artifact
         uses: actions/upload-artifact@v4
