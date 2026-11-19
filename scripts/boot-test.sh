@@ -146,13 +146,15 @@ parted -s "$TEST/disk.img" mklabel gpt mkpart primary ext4 1MiB 63MiB
 dd if="$TEST/part.img" of="$TEST/disk.img" bs=1M seek=1 conv=notrunc status=none
 
 accel=(-accel tcg)
+cpu=(-cpu max)
 if [[ -r /dev/kvm && -w /dev/kvm ]]; then
     accel=(-enable-kvm)
+    cpu=(-cpu host)
 fi
 
 set +e
 timeout 180 qemu-system-x86_64 \
-    "${accel[@]}" -m 512 -smp 1 \
+    "${accel[@]}" "${cpu[@]}" -m 512 -smp 1 \
     -kernel "$KERNEL" \
     -initrd "$TEST/initramfs.cpio.gz" \
     -append "console=ttyS0 panic=5" \
