@@ -109,14 +109,15 @@ public/
 └── index.html
 ```
 
-Users install with:
+Users install with the URL reported by `actions/configure-pages` (the default
+`https://OWNER.github.io/REPO`, or a configured custom Pages domain):
 
 ```sh
 sudo install -m 0644 microvm-archive-keyring.asc \
   /usr/share/keyrings/microvm-archive-keyring.asc
 
 echo "deb [signed-by=/usr/share/keyrings/microvm-archive-keyring.asc] \
-https://OWNER.github.io/REPO stable main" \
+<PAGES_URL> stable main" \
   | sudo tee /etc/apt/sources.list.d/microvm.list
 
 sudo apt update

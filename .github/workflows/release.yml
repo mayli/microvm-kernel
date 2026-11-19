@@ -150,9 +150,14 @@ jobs:
           install -m 700 -d "$HOME/.gnupg"
           printf '%s' "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
 
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
       - name: Build apt repository
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
         run: |
           set -euo pipefail
           : "${GPG_KEY_ID:?set the GPG_KEY_ID secret}"
@@ -186,12 +191,16 @@ jobs:
           image_deb="$(ls ../out/debs/linux-image-*microvm*.deb | head -n 1)"
           image_pkg="$(dpkg-deb -f "$image_deb" Package)"
 
-          owner="${GITHUB_REPOSITORY%/*}"
-          repo="${GITHUB_REPOSITORY#*/}"
-          if [[ "$repo" == *.github.io ]]; then
-              pages_url="https://${repo}"
-          else
-              pages_url="https://${owner}.github.io/${repo}"
+          pages_url="${PAGES_URL:-}"
+          pages_url="${pages_url%/}"
+          if [[ -z "$pages_url" ]]; then
+              owner="${GITHUB_REPOSITORY%/*}"
+              repo="${GITHUB_REPOSITORY#*/}"
+              if [[ "$repo" == *.github.io ]]; then
+                  pages_url="https://${repo}"
+              else
+                  pages_url="https://${owner}.github.io/${repo}"
+              fi
           fi
 
           cat > index.html <<EOF
@@ -207,9 +216,6 @@ jobs:
           sudo apt update
           sudo apt install ${image_pkg}</pre>
           EOF
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
