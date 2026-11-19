@@ -45,6 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require Pages signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          : "${GPG_PRIVATE_KEY:?set the GPG_PRIVATE_KEY repository secret}"
+          : "${GPG_KEY_ID:?set the GPG_KEY_ID repository secret}"
+
       - name: Install boot-test tools
         run: |
           sudo apt-get update
