@@ -78,13 +78,13 @@ first_line = text.splitlines()[0] if text else ""
 
 if f"({version})" not in first_line:
     name = os.environ.get("DEBFULLNAME", "ubuntu-mini")
-    email = os.environ.get("DEBEMAIL", "ubuntu-mini@localhost")
+    email_addr = os.environ.get("DEBEMAIL", "ubuntu-mini@localhost")
     date = email.utils.formatdate(localtime=True)
     entry = (
         f"linux ({version}) resolute; urgency=medium\n\n"
         "  * Custom microvm flavour for ubuntu-mini: monolithic guest kernel,\n"
         "    no loadable modules, virtio/squashfs/overlayfs built in.\n\n"
-        f" -- {name} <{email}>  {date}\n\n"
+        f" -- {name} <{email_addr}>  {date}\n\n"
     )
     changelog.write_text(entry + text)
 PY
