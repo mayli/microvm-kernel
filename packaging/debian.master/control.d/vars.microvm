@@ -1,0 +1,6 @@
+arch="amd64"
+supported="MicroVM"
+target="Minimal KVM and microVM guest kernel with virtio, squashfs and overlayfs built in."
+bootloader="grub-pc [amd64] | grub-efi-amd64 [amd64]"
+provides=""
+depends=""

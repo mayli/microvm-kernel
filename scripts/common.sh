@@ -11,6 +11,8 @@ CONFIG_FRAGMENTS="$ROOT/config/fragments"
 
 UBUNTU_REPO="${UBUNTU_REPO:-https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/resolute}"
 UBUNTU_TAG="${UBUNTU_TAG:-Ubuntu-7.0.0-43.43}"
+UBUNTU_SOURCE_VERSION="${UBUNTU_SOURCE_VERSION:-7.0.0-43.43}"
+USE_APT_SOURCE="${USE_APT_SOURCE:-1}"
 KERNEL_VERSION="${KERNEL_VERSION:-7.0.0-999.1}"
 PPA="${PPA:-ppa:CHANGE_ME/microvm}"
 
@@ -32,5 +34,5 @@ require_file() {
 }
 
 require_src() {
-    [[ -d "$SRC/.git" ]] || die "kernel source missing at $SRC; run 'make prepare'"
+    [[ -f "$SRC/debian/rules" ]] || die "kernel source missing at $SRC; run 'make prepare'"
 }

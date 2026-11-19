@@ -3,7 +3,6 @@ set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
 require_src
-require_file "$SRC/.config"
 require_cmd fakeroot
 require_cmd dpkg-deb
 

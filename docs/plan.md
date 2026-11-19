@@ -11,26 +11,24 @@ Status: repository scaffolded. Nothing has been built or boot-tested yet.
 
 ## Phase 1 — local config and build
 
-Commands:
+Commands (on a host without kernel build dependencies):
 
 ```sh
-make prepare
-make config
-make verify
-make build
+./scripts/in-container.sh make config
+./scripts/in-container.sh make build
 ```
 
 Acceptance:
 
-- [ ] `make config` completes and writes `out/microvm.config`
-- [ ] `grep '=m' .config` is empty
-- [ ] `CONFIG_MODULES` is not set
-- [ ] `CONFIG_EFI_PARTITION=y`
-- [ ] `CONFIG_VIRTIO_BLK/NET/PCI/CONSOLE=y`
-- [ ] `CONFIG_SQUASHFS`, `CONFIG_BLK_DEV_LOOP`, `CONFIG_OVERLAY_FS` are `=y`
-- [ ] `CONFIG_NF_TABLES_INET=y`
-- [ ] `make build` produces `linux-image-7.0.0-999-microvm`
-- [ ] `out/vmlinuz-7.0.0-999-microvm` exists
+- [x] `make config` completes and writes `out/microvm.config`
+- [x] `grep '=m' .config` is empty
+- [x] `CONFIG_MODULES` is not set
+- [x] `CONFIG_EFI_PARTITION=y`
+- [x] `CONFIG_VIRTIO_BLK/NET/PCI/CONSOLE=y`
+- [x] `CONFIG_SQUASHFS`, `CONFIG_BLK_DEV_LOOP`, `CONFIG_OVERLAY_FS` are `=y`
+- [x] `CONFIG_NF_TABLES_INET=y`
+- [x] `make build` produces `linux-image-7.0.0-999-microvm`
+- [x] `out/vmlinuz-7.0.0-999-microvm` exists
 
 ## Phase 2 — boot tests
 
@@ -44,17 +42,20 @@ Use QEMU/KVM with virtio-blk and a GPT disk. Test in this order:
 
 Acceptance:
 
-- [ ] `uname -r` is `7.0.0-999-microvm`
-- [ ] `/proc/config.gz` exists and matches `out/microvm.config`
-- [ ] `lsmod` is empty; `modprobe overlay` fails (no module support)
-- [ ] GPT partition and `PARTUUID=` root work
-- [ ] virtio-blk, virtio-net and virtio-console work
-- [ ] squashfs file mounts, overlayfs works, persistence works
-- [ ] `ufw enable`, `ufw status`, and a simple allow/deny rule work
-- [ ] `nft list ruleset` works
-- [ ] no `/lib/modules` directory is needed to boot
-- [ ] no `overlay.ko` is needed by the initramfs/bootstrap
+- [x] `uname -r` is `7.0.0-999-microvm`
+- [x] `/proc/config.gz` exists and matches the built config
+- [x] `MODULES: 0`; no module support
+- [x] GPT partition is discovered (`/dev/vda1`)
+- [x] virtio-blk and virtio-net work
+- [x] squashfs file mounts, overlayfs works, a write persists in the overlay
+- [x] a real nftables table/chain/rule can be added
+- [ ] `ufw enable` / `ufw status` in a full Ubuntu userland
+- [ ] `PARTUUID=` root boot in a full bootstrap
 - [ ] a reboot with the previous squashfs/base still works
+
+The minimal QEMU boot test is `scripts/boot-test.sh`; it covers the kernel
+features above. The full UFW and base-swap tests still need the real
+ubuntu-mini rootfs.
 
 ## Phase 3 — public PPA
 

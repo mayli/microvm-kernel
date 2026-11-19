@@ -3,12 +3,14 @@ SHELL := /usr/bin/env bash
 
 UBUNTU_REPO ?= https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/resolute
 UBUNTU_TAG ?= Ubuntu-7.0.0-43.43
+UBUNTU_SOURCE_VERSION ?= 7.0.0-43.43
+USE_APT_SOURCE ?= 1
 KERNEL_VERSION ?= 7.0.0-999.1
 PPA ?= ppa:CHANGE_ME/microvm
 
-export UBUNTU_REPO UBUNTU_TAG KERNEL_VERSION PPA
+export UBUNTU_REPO UBUNTU_TAG UBUNTU_SOURCE_VERSION USE_APT_SOURCE KERNEL_VERSION PPA
 
-.PHONY: help prepare config verify build source upload clean distclean
+.PHONY: help prepare config verify build boot-test source upload clean distclean
 
 help:
 	@printf '%s\n' \
@@ -16,6 +18,7 @@ help:
 	  'make config    Render .config from Firecracker + fragments and import it' \
 	  'make verify    Check the generated .config for required built-ins' \
 	  'make build     Build the microvm flavour locally' \
+	  'make boot-test Boot the built vmlinuz in QEMU/KVM and check guest features' \
 	  'make source    Create a signed source package for the PPA' \
 	  'make upload    Upload the source package to PPA=ppa:user/name' \
 	  'make clean     Remove out/ (keeps the kernel source clone)' \
@@ -32,6 +35,9 @@ verify: config
 
 build: config
 	./scripts/build-local.sh
+
+boot-test:
+	./scripts/boot-test.sh
 
 source: config
 	./scripts/source-package.sh

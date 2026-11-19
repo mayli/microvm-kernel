@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
-cfg="${1:-$SRC/.config}"
+cfg="${1:-$OUT/microvm.config}"
 require_file "$cfg"
 
 fail=0

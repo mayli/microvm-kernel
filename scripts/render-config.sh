@@ -32,4 +32,10 @@ log "importing config into debian.master/config/annotations for amd64-microvm"
 debian/scripts/misc/annotations \
     --arch amd64 --flavour microvm --import .config
 
+# The Ubuntu packaging builds out-of-tree and refuses a dirty source tree.
+# olddefconfig above writes in-tree artifacts, so clean them now.  The
+# generated config remains available in $OUT/microvm.config.
+log "cleaning in-tree Kconfig artifacts"
+make mrproper
+
 log "config imported"

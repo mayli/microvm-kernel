@@ -21,20 +21,38 @@ ubuntu-mini's base-swap tooling. Use the versioned package or extract its
 
 ## Quick start
 
-Run this on resolute/26.04 (or in a resolute chroot) with `deb-src` enabled:
+`make prepare` uses `apt-get source linux=7.0.0-43.43` by default. That gives
+the exact archive source tree plus the `linux_7.0.0.orig.tar.gz` needed for
+the PPA. Set `USE_APT_SOURCE=0` to clone the Launchpad git tag instead.
+
+The build host needs a resolute/26.04 build environment. If the host is
+missing kernel build dependencies, build inside the provided container:
+
+```sh
+./scripts/in-container.sh make config
+./scripts/in-container.sh make build
+```
+
+On a host with `deb-src` and the kernel build dependencies installed:
 
 ```sh
 sudo apt update
 sudo apt build-dep -y linux
 sudo apt install -y fakeroot dpkg-dev devscripts dput
 
-make prepare     # clone + patch the Ubuntu kernel source under work/linux
-make config      # render .config, verify it, import it into annotations
-make verify      # re-check the generated config
-make build       # build linux-image-...-microvm locally
+make prepare
+make config
+make verify
+make build
 ```
 
 The build writes `.deb` files and the extracted `vmlinuz` under `out/`.
+
+After a build, run the QEMU boot test:
+
+```sh
+make boot-test
+```
 
 To publish:
 
@@ -63,7 +81,10 @@ AppArmor.
 ```text
 config/upstream/     Vendored Firecracker configs (pinned commit)
 config/fragments/    Our overrides, applied after the upstream fragments
-scripts/             prepare, render, verify, build, source, upload
+patches/             Ubuntu packaging guards for a kernel with no modules
+packaging/           Extra control.d flavour metadata
+docker/              Reproducible resolute build container
+scripts/             prepare, render, verify, build, boot test, source, upload
 docs/decisions.md    What we chose and why
 docs/plan.md         Phases, tests, acceptance criteria, risks
 work/                Ubuntu kernel source clone and build output (ignored)

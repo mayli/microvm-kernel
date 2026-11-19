@@ -16,6 +16,18 @@ The target is a QEMU/KVM guest with:
 - UFW/nftables
 - BIOS/GRUB, no Secure Boot
 
+## Source input
+
+Use `apt-get source linux=7.0.0-43.43` as the default source input. It:
+
+- gives the exact source tree that the archive/Launchpad uses
+- provides `linux_7.0.0.orig.tar.gz`, which Debian source format `1.0`
+  needs for a PPA upload
+- avoids carrying a 2 GiB git clone and its `.git` directory
+
+`USE_APT_SOURCE=0` switches to the Launchpad git tag for comparison or
+bisecting. The two inputs should describe the same source version.
+
 ## Flavour and package names
 
 - Flavour: `microvm`
@@ -77,6 +89,11 @@ one-to-one.
     boots BIOS but its disk is GPT. The `efi.config` fragment also sets it.
 - Disable `DEVMEM` (public kernel, no need for `/dev/mem`)
 - Disable `SERIO` / keyboard input (headless guest)
+- Disable `DAMON`
+  - Firecracker's CI config enables it, but the guest does not need it.
+  - Ubuntu 7.0.0-43.43 has a latent DAMON build error
+    (`mm/damon/core.c` uses `min_sz_region` instead of the function parameter
+    `min_region_sz`); generic builds hide it with `CONFIG_DAMON=n`.
 - Keep `IKCONFIG`/`IKCONFIG_PROC` for `/proc/config.gz`
 - Keep `MSDOS_PARTITION` for MBR images
 
@@ -98,6 +115,19 @@ This must be verified on the target with `ufw status` and `nft list ruleset`.
 Ubuntu userspace expects AppArmor. The Firecracker config defaults to SELinux
 and has AppArmor disabled. The fragment enables AppArmor and sets Ubuntu's LSM
 order. Remove the fragment if the guest image does not ship `apparmor`.
+
+## No-modules packaging patch
+
+Ubuntu's `debian/rules.d/2-binary-arch.mk` assumes that a kernel has at least
+one loadable module. With `CONFIG_MODULES=n`, the build has no
+`scripts/module.lds`, `Module.symvers`, `modules.order`, watchdog module
+directory, or `.ko` from which to read compiler info. The patch in
+`patches/2-binary-arch-no-modules.patch` guards those steps. It does not
+change the kernel image or config; it only makes the package assembly work
+for a monolithic kernel.
+
+`packaging/debian.master/control.d/vars.microvm` adds the flavour metadata
+needed to generate `linux-image-7.0.0-999-microvm` in `debian/control`.
 
 ## Signing, PPA and distribution
 
