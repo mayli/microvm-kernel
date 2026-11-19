@@ -12,7 +12,7 @@ if ! docker image inspect "$image" >/dev/null 2>&1; then
 fi
 
 env_args=()
-for var in KERNEL_VERSION UBUNTU_SOURCE_VERSION SOURCE_UPLOAD USE_APT_SOURCE \
+for var in KERNEL_VERSION UBUNTU_SOURCE_VERSION USE_APT_SOURCE \
            UBUNTU_TAG UBUNTU_REPO DEBFULLNAME DEBEMAIL; do
     if [[ -n "${!var:-}" ]]; then
         env_args+=(--env "$var=${!var}")

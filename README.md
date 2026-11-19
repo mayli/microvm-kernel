@@ -1,115 +1,106 @@
-# Ubuntu microvm kernel builds
+# Ubuntu microvm kernel
 
-Build and publish a minimal, monolithic Ubuntu kernel for the `ubuntu-mini`
-guest VMs.
+Minimal, monolithic Ubuntu kernel for `ubuntu-mini` QEMU/KVM guests.
 
-- **Ubuntu source:** `linux` `7.0.0-43.43`, `resolute` (26.04), tag
-  `Ubuntu-7.0.0-43.43`
-- **Flavour:** `microvm`
-- **Config seed:** Firecracker's
-  `microvm-kernel-ci-x86_64-6.18.config`, plus its `ci.config` and
-  `efi.config` fragments
-- **Output:** `linux-image-<upstream>-microvm` — unsigned, no loadable modules
-- **Target:** QEMU/KVM guest with virtio-blk/net/console, GPT + ext4,
-  squashfs + overlayfs
-- **Signing:** kernel unsigned; the GitHub Pages apt repo is signed.
-  Secure Boot is out of scope.
-- **Distribution:** GitHub Releases for archives plus a GitHub Pages apt
-  repository for `apt install` / `apt upgrade`
+- Ubuntu `linux` `7.0.0-43.43` (`resolute`, 26.04)
+- Flavour: `microvm`
+- Config seed: Firecracker `microvm-kernel-ci-x86_64-6.18.config`
+  plus `ci.config` and `efi.config`
+- Unsigned, **no loadable modules**
+- virtio-blk/net/console, GPT, ext4, squashfs, overlayfs, UFW/netfilter,
+  AppArmor
 
-The optional meta package `linux-image-microvm` is not required for
-ubuntu-mini's base-swap tooling. Use the versioned package or extract its
-`vmlinuz`.
+GitHub Actions builds and boot-tests the kernel, publishes a GitHub Release,
+and deploys a signed apt repository to GitHub Pages.
 
-## Quick start
-
-`make prepare` uses `apt-get source linux=7.0.0-43.43` by default. That gives
-the exact archive source tree. Set `USE_APT_SOURCE=0` to clone the Launchpad
-git tag instead.
-
-The build host needs a resolute/26.04 build environment. If the host is
-missing kernel build dependencies, build inside the provided container:
+## Local build
 
 ```sh
-./scripts/in-container.sh make config
 ./scripts/in-container.sh make build
-```
-
-On a host with `deb-src` and the kernel build dependencies installed:
-
-```sh
-sudo apt update
-sudo apt build-dep -y linux
-sudo apt install -y fakeroot dpkg-dev devscripts dput
-
-make prepare
-make config
-make verify
-make build
-```
-
-The build writes `.deb` files and the extracted `vmlinuz` under `out/`.
-
-After a build, run the QEMU boot test:
-
-```sh
 make boot-test
 ```
 
-The GitHub Actions workflow builds, boot-tests and publishes the kernel to a
-GitHub Release and a GitHub Pages apt repository. See
-[`docs/ci-cd.md`](docs/ci-cd.md).
+Outputs:
 
-The older Launchpad source-upload path is still available manually:
-
-```sh
-make source
-debsign -kYOUR_GPG_KEY_ID work/linux_7.0.0-999.1_source.changes
-make upload PPA=ppa:YOUR_USER/microvm
+```text
+out/vmlinuz-7.0.0-43-microvm
+out/debs/linux-image-7.0.0-43-microvm_*.deb
+out/debs/linux-modules-7.0.0-43-microvm_*.deb
+out/microvm.config
 ```
 
-The first source upload includes the ~255 MiB `linux_7.0.0.orig.tar.gz`.
-Later uploads can reuse it with `SOURCE_UPLOAD=sd`. `make source`
-deliberately builds an unsigned source package.
+Local `make prepare/config/verify/build` also works on a resolute host with
+the kernel build dependencies installed. `make prepare` uses
+`apt-get source linux=7.0.0-43.43`; set `USE_APT_SOURCE=0` to use the
+Launchpad git tag instead.
 
-## Why this exists
+## CI/CD
 
-The stock Ubuntu generic kernel has `overlayfs`, many netfilter pieces, and
-other drivers as modules. ubuntu-mini wants a kernel that can boot a
-virtio-backed guest, mount a squashfs file over a writable overlay, and run
-UFW without carrying a module tree or matching `overlay.ko`.
+`.github/workflows/release.yml` runs daily at 04:17 UTC and on manual
+dispatch. It:
 
-Firecracker's microVM config is already a monolithic guest config with no
-`=m` entries. This project reuses that config, adapts it to Ubuntu 26.04 and
-adds the missing pieces for GPT partitions, UFW/nftables, and optionally
-AppArmor.
+1. Finds the newest stable `linux` source for `resolute` in Launchpad's
+   Release/Updates/Security pockets.
+2. Stops if a `kernel-<upstream>-*` GitHub Release already exists.
+3. Builds and boot-tests the kernel.
+4. Publishes `.deb`, `vmlinuz`, config, `System.map` and `SHA256SUMS` to a
+   GitHub Release.
+5. Deploys a signed apt repository to GitHub Pages.
+
+Manual rebuild:
+
+```sh
+gh workflow run microvm-kernel-release \
+  -R mayli/microvm-kernel \
+  -f force=true
+```
+
+### Required setup
+
+- **Settings → Pages → Source: GitHub Actions**
+- Repository secrets:
+  - `GPG_PRIVATE_KEY`: base64 of the apt-repo signing key
+  - `GPG_KEY_ID`: key ID/fingerprint
+
+The GitHub Pages apt repository contains only the current build. Older
+versions remain in GitHub Releases. The kernel is unsigned; the apt metadata
+is signed.
+
+## Install from Pages
+
+Download `microvm-archive-keyring.asc` and use the URL shown on the Pages
+index page:
+
+```sh
+sudo install -m 0644 microvm-archive-keyring.asc \
+  /usr/share/keyrings/microvm-archive-keyring.asc
+
+echo "deb [signed-by=/usr/share/keyrings/microvm-archive-keyring.asc] \
+https://OWNER.github.io/REPO stable main" \
+  | sudo tee /etc/apt/sources.list.d/microvm.list
+
+sudo apt update
+sudo apt install linux-image-7.0.0-43-microvm
+```
 
 ## Layout
 
 ```text
-config/upstream/     Vendored Firecracker configs (pinned commit)
-config/fragments/    Our overrides, applied after the upstream fragments
-patches/             Ubuntu packaging guards for a kernel with no modules
-packaging/           Extra control.d flavour metadata
-docker/              Reproducible resolute build container
-.github/             GitHub Actions build/release workflow and upstream check
-scripts/             prepare, render, verify, build, boot test, source, upload
-docs/decisions.md    What we chose and why
-docs/ci-cd.md        GitHub Actions → Release + Pages setup and schedule
-docs/plan.md         Phases, tests, acceptance criteria, risks
-work/                Ubuntu kernel source clone and build output (ignored)
-out/                 Collected .debs, vmlinuz, rendered config (ignored)
+config/upstream/     Pinned Firecracker configs
+config/fragments/    Project overrides
+patches/             No-modules packaging guards
+packaging/           microvm flavour control metadata
+docker/              Resolute build container
+.github/             Release workflow and upstream check
+scripts/             prepare, config, build, boot-test
+work/                Source and build output (ignored)
+out/                 Release artifacts (ignored)
 ```
 
-## Requirements and limitations
+## Limits
 
-- The local build needs a resolute build environment; GitHub Actions uses the
-  provided container.
-- Expect a kernel build of roughly 10–20 minutes in CI on a 4-core runner,
-  because debug info, modules, tools and DKMS are disabled.
-- The result is **unsigned**. Do not use it with Secure Boot unless you sign
-  it yourself.
-- `CONFIG_MODULES=n` means no loadable modules, no `/lib/modules` tree, and no
-  `overlay.ko`. Any feature needed at boot or runtime must be built in.
-- Adding the flavour to `debian.master/config/annotations` produces a large
-  annotations diff. That is expected.
+- The kernel has no module support. Anything not built in is unavailable.
+- The Pages site has a 1 GB limit; only the current package set is published.
+- The kernel is unsigned; Secure Boot is out of scope.
+- ABI changes (`7.0.0-43` → `7.0.0-44`) require installing the new package
+  name unless a meta package is added.

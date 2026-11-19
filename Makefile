@@ -5,13 +5,11 @@ UBUNTU_REPO ?= https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+gi
 UBUNTU_TAG ?= Ubuntu-7.0.0-43.43
 UBUNTU_SOURCE_VERSION ?= 7.0.0-43.43
 USE_APT_SOURCE ?= 1
-SOURCE_UPLOAD ?= sa
 KERNEL_VERSION ?= 7.0.0-999.1
-PPA ?= ppa:CHANGE_ME/microvm
 
-export UBUNTU_REPO UBUNTU_TAG UBUNTU_SOURCE_VERSION USE_APT_SOURCE SOURCE_UPLOAD KERNEL_VERSION PPA
+export UBUNTU_REPO UBUNTU_TAG UBUNTU_SOURCE_VERSION USE_APT_SOURCE KERNEL_VERSION
 
-.PHONY: help prepare config verify build boot-test source upload clean distclean
+.PHONY: help prepare config verify build boot-test clean distclean
 
 help:
 	@printf '%s\n' \
@@ -20,8 +18,6 @@ help:
 	  'make verify    Check the generated .config for required built-ins' \
 	  'make build     Build the microvm flavour locally' \
 	  'make boot-test Boot the built vmlinuz in QEMU/KVM and check guest features' \
-	  'make source    Create a source package for the PPA' \
-	  'make upload    Upload the source package to PPA=ppa:user/name' \
 	  'make clean     Remove out/ (keeps the kernel source clone)' \
 	  'make distclean Remove out/ and work/'
 
@@ -39,12 +35,6 @@ build: config
 
 boot-test:
 	./scripts/boot-test.sh
-
-source: config
-	./scripts/source-package.sh
-
-upload: source
-	./scripts/publish-ppa.sh
 
 clean:
 	rm -rf out

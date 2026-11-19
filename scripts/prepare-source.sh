@@ -46,11 +46,6 @@ EOF
     [[ -n "$unpacked" ]] || die "apt-get source did not unpack a linux-* tree"
 
     mv "$unpacked" "$SRC"
-
-    # Keep the source-package files next to the tree for 'make source'.
-    find "$dir/src" -maxdepth 1 -type f \
-        \( -name 'linux_*.orig.tar.*' -o -name 'linux_*.dsc' -o -name 'linux_*.diff.*' \) \
-        -exec cp -v {} "$WORK/" \;
 }
 
 log "Ubuntu source version: $UBUNTU_SOURCE_VERSION"

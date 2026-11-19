@@ -3,16 +3,5 @@
 /work/
 /out/
 
-*.deb
-*.udeb
-*.dsc
-*.changes
-*.buildinfo
-*.build
-*.tar.gz
-*.tar.xz
-*.diff.gz
-*.debian.tar.*
-
 __pycache__/
 *.pyc
