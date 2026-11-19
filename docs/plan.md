@@ -69,11 +69,17 @@ Commands:
 
 ```sh
 make source
+debsign -kYOUR_GPG_KEY_ID work/linux_7.0.0-999.1_source.changes
 make upload PPA=ppa:YOUR_USER/microvm
 ```
 
 Acceptance:
 
+- [x] `make source` produces `linux_7.0.0-999.1.dsc` and
+      `linux_7.0.0-999.1_source.changes`
+- [x] the source diff contains `vars.microvm`, `flavours = microvm`, the
+      no-modules packaging patch, and the `amd64-microvm` annotations
+- [ ] `.changes` is signed with the Launchpad GPG key
 - [ ] Launchpad builds `amd64` successfully
 - [ ] `.changes` includes the orig tarball on the first upload
 - [ ] the PPA contains `linux-image-7.0.0-999-microvm`

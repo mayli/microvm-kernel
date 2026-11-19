@@ -58,11 +58,16 @@ To publish:
 
 ```sh
 make source
+debsign -kYOUR_GPG_KEY_ID work/linux_7.0.0-999.1_source.changes
 make upload PPA=ppa:YOUR_USER/microvm
 ```
 
 The first source upload includes the ~255 MiB `linux_7.0.0.orig.tar.gz`.
-Later uploads can reuse it.
+Later uploads can reuse it. `make source` deliberately builds an unsigned
+source package; Launchpad requires the `.changes` to be signed with the GPG
+key registered to your Launchpad account. Set `DEBFULLNAME`/`DEBEMAIL` (or
+edit the changelog) before the first source build so `Changed-By` is the
+identity associated with that key.
 
 ## Why this exists
 

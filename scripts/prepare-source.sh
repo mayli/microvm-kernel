@@ -104,7 +104,7 @@ root = Path.cwd()
 rules = root / "debian.master/rules.d/amd64.mk"
 text = rules.read_text()
 
-text = re.sub(r"(?m)^flavours\s*=.*$", "flavours\t= generic microvm", text)
+text = re.sub(r"(?m)^flavours\s*=.*$", "flavours\t= microvm", text)
 
 if re.search(r"(?m)^uefi_signed\s*=", text):
     text = re.sub(r"(?m)^uefi_signed\s*=.*$", "uefi_signed = false", text)

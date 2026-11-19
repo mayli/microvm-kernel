@@ -19,7 +19,7 @@ help:
 	  'make verify    Check the generated .config for required built-ins' \
 	  'make build     Build the microvm flavour locally' \
 	  'make boot-test Boot the built vmlinuz in QEMU/KVM and check guest features' \
-	  'make source    Create a signed source package for the PPA' \
+	  'make source    Create a source package for the PPA' \
 	  'make upload    Upload the source package to PPA=ppa:user/name' \
 	  'make clean     Remove out/ (keeps the kernel source clone)' \
 	  'make distclean Remove out/ and work/'
